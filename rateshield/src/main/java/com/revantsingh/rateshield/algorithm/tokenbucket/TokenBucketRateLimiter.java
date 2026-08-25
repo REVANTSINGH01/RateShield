@@ -9,7 +9,7 @@ import java.util.concurrent.ScheduledExecutorService;
 
 public class TokenBucketRateLimiter implements RateLimiter {
 
-    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+    final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
     private final long bucketExpirationNanos;
     private static final long DEFAULT_BUCKET_EXPIRATION_MINUTES = 10;
     private final long capacity;
@@ -17,10 +17,30 @@ public class TokenBucketRateLimiter implements RateLimiter {
     private final ScheduledExecutorService cleanupExecutor=Executors.newSingleThreadScheduledExecutor();
 
     public TokenBucketRateLimiter(long capacity, double refillRate) {
+        this(capacity,refillRate,10,1,TimeUnit.MINUTES);
+    }
+
+    public TokenBucketRateLimiter(long capacity, double refillRate, long bucketExpiration, long cleanupInterval, TimeUnit timeUnit) {
+        if(capacity <= 0){
+            throw new IllegalArgumentException( "Capacity must be greater than 0");
+        }
+        if(refillRate < 0){
+            throw new IllegalArgumentException("Refill rate cannot be negative");
+        }
+
+        if(bucketExpiration <= 0){
+            throw new IllegalArgumentException("Bucket expiration must be greater than 0");
+        }
+
+        if(cleanupInterval <= 0){
+            throw new IllegalArgumentException("Cleanup interval must be greater than 0");
+        }
         this.capacity = capacity;
         this.refillRate = refillRate;
-        this.bucketExpirationNanos = TimeUnit.MINUTES.toNanos(DEFAULT_BUCKET_EXPIRATION_MINUTES);
-        cleanupExecutor.scheduleAtFixedRate(this::cleanupExpiredBuckets,1,1,TimeUnit.MINUTES);
+
+        this.bucketExpirationNanos = timeUnit.toNanos(bucketExpiration);
+
+        cleanupExecutor.scheduleAtFixedRate(this::cleanupExpiredBuckets, cleanupInterval, cleanupInterval, timeUnit);
     }
 
     @Override
@@ -62,5 +82,12 @@ public class TokenBucketRateLimiter implements RateLimiter {
                 }
             }
         }
+    }
+
+    public int getBucketCount() {
+        return buckets.size();
+    }
+    public void shutdown() {
+        cleanupExecutor.shutdown();
     }
 }
